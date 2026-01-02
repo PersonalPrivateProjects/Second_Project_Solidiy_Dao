@@ -13,7 +13,12 @@ import {
   voteDirect,
   VoteType,
   truncate,
-  formatEth,
+  formatEth,  
+  buildVoteMetaTx,            // ⬅️ nuevo
+  serializeForwardRequest,     // ⬅️ si no lo tienes aquí, impórtalo
+  sendMetaTxToRelayer,         // ⬅️ ya existente
+  getSignerAddress,            // ⬅️ para conocer el 'from'
+
 } from "../lib/daoHelpers";
 import { getEthereum, onAccountsChanged, onChainChanged } from "../lib/web3";
 import { getDAOVoting } from "../lib/contracts";
@@ -36,6 +41,10 @@ export default function ProposalList() {
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [voteBusyId, setVoteBusyId] = useState<number | null>(null);
   const [tick, setTick] = useState<number>(0); // re-render liviano para countdown
+  
+ // 🔄 Toggle global para gasless voting
+  const [useGasless, setUseGasless] = useState<boolean>(false);
+
 
   const sortedProposals = useMemo(() => {
     // Activas primero, luego por ID DESC
@@ -118,30 +127,78 @@ useEffect(() => {
     return () => clearInterval(iv);
   }, []);
 
+  
+// Escucha el bus por si otro componente (CreateProposal) lo dispara
+  useEffect(() => {
+    const handler = () => { loadAll(); };
+    window.addEventListener("dao:proposalCreated", handler);
+    window.addEventListener("dao:voted", handler);
+    return () => {
+      window.removeEventListener("dao:proposalCreated", handler);
+      window.removeEventListener("dao:voted", handler);
+    };
+  }, []);
+
+
   async function handleVote(id: number, v: VoteType) {
     setVoteBusyId(id);
     setErrorMsg(null);
-    try {
-      await voteDirect(id, v);
-      await loadAll();
+  
+ try {
+      if (useGasless) {
+          const from = await getSignerAddress();
+          if (!from) throw new Error("Wallet no conectada.");
+  
+          const { request, signature } = await buildVoteMetaTx(from, id, v);
+          const safeReq = serializeForwardRequest(request);
+          const { txHash } = await sendMetaTxToRelayer(safeReq, signature);
+  
+          // Feedback y bus
+          console.log("Gasless vote tx:", txHash);
+        try { window.dispatchEvent(new CustomEvent("dao:voted")); } catch {}
+      } else {
+         await voteDirect(id, v);
+      }
+
+        await loadAll();
     } catch (err: any) {
-      const msg = err?.reason || err?.message || "Error al votar";
-      setErrorMsg(msg);
+        const msg = err?.reason || err?.message || "Error al votar";
+        setErrorMsg(msg);
     } finally {
-      setVoteBusyId(null);
+       setVoteBusyId(null);
     }
   }
 
-  return (
+
+ return (
     <div className="overflow-x-auto">
+      {/* Header de acciones (toggle gasless + refrescar manual) */}
+      <div className="flex items-center justify-end gap-4 p-2">
+        <label className="flex items-center gap-2 text-xs">
+          <input
+            type="checkbox"
+            className="h-4 w-4"
+            checked={useGasless}
+            onChange={(e) => setUseGasless(e.target.checked)}
+          />
+          Usar gasless para votar (EIP‑2771)
+        </label>
+        <button
+          type="button"
+          onClick={loadAll}
+          className="rounded-md border border-neutral-700 bg-neutral-800 px-2 py-1 text-xs hover:bg-neutral-700"
+        >
+          Actualizar
+        </button>
+      </div>
+
       {errorMsg && <div className="text-xs text-red-400 p-2">{errorMsg}</div>}
 
       <table className="min-w-full text-sm">
         <thead className="bg-neutral-800 text-neutral-300">
           <tr>
             <th className="px-4 py-2 text-left font-medium">ID</th>
-            <th className="px-4 py-2 text-left font-medium">Descripción</th>
-            <th className="px-4 py-2 text-left font-medium">Creador</th>
+            <th className="px-4 py-2 text-left font-medium">Descripción</th>            
             <th className="px-4 py-2 text-left font-medium">Beneficiario</th>
             <th className="px-4 py-2 text-left font-medium">Monto (ETH)</th>
             <th className="px-4 py-2 text-left font-medium">Estado</th>
@@ -155,17 +212,11 @@ useEffect(() => {
         </thead>
         <tbody>
           {loading && (
-            <tr>
-              <td className="px-4 py-3" colSpan={12}>Cargando…</td>
-            </tr>
+            <tr><td className="px-4 py-3" colSpan={12}>Cargando…</td></tr>
           )}
-
           {!loading && sortedProposals.length === 0 && (
-            <tr>
-              <td className="px-4 py-3" colSpan={12}>Sin propuestas</td>
-            </tr>
+            <tr><td className="px-4 py-3" colSpan={12}>Sin propuestas</td></tr>
           )}
-
           {!loading && sortedProposals.map((p) => {
             const active = isActive(p);
             const timeLeft = getTimeRemainingSec(p);
@@ -175,52 +226,30 @@ useEffect(() => {
             const amountEth = formatEth(p.amount);
             const recipientTrunc = truncate(p.recipient);
 
-            // Estado más expresivo (opcional)
-            let statusLabel = p.executed ? "Ejecutada" : active ? "Activa" : "Finalizada";
-            const statusClass = p.executed
-              ? "bg-neutral-700"
-              : active
-              ? "bg-emerald-700"
-              : "bg-neutral-800";
+            const statusLabel = p.executed ? "Ejecutada" : active ? "Activa" : "Finalizada";
+            const statusClass = p.executed ? "bg-neutral-700" : active ? "bg-emerald-700" : "bg-neutral-800";
 
             return (
               <tr key={p.id} className="border-t border-neutral-800">
                 <td className="px-4 py-3">{p.id}</td>
-
-                <td className="px-4 py-3">{p.description}</td>
-
-                <td className="px-4 py-3">
-                  <span className="font-mono">{truncate(p.creator)}</span>
-                </td>
-
-                <td className="px-4 py-3">
-                  <span className="font-mono">{recipientTrunc}</span>
-                </td>
-
+                <td className="px-4 py-3">{p.description}</td>            
+                <td className="px-4 py-3"><span className="font-mono">{recipientTrunc}</span></td>
                 <td className="px-4 py-3">{amountEth}</td>
-
                 <td className="px-4 py-3">
-                  <span className={`rounded px-2 py-1 text-xs ${statusClass}`}>
-                    {statusLabel}
-                  </span>
+                  <span className={`rounded px-2 py-1 text-xs ${statusClass}`}>{statusLabel}</span>
                 </td>
-
                 <td className="px-4 py-3">
-                  {/* Countdown legible */}
                   {formatSecondsCompact(timeLeft)}
-                  {/* Opcional: mostrar fecha ejecutable si está finalizada */}
                   {!active && !p.executed && (
                     <div className="text-[11px] text-neutral-500">
                       Ejecutable desde: {new Date(Number(p.executionDelay) * 1000).toLocaleString()}
                     </div>
                   )}
                 </td>
-
                 <td className="px-4 py-3">{totals}</td>
                 <td className="px-4 py-3">{pct.for}%</td>
                 <td className="px-4 py-3">{pct.against}%</td>
                 <td className="px-4 py-3">{pct.abstain}%</td>
-
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <button
@@ -257,3 +286,4 @@ useEffect(() => {
     </div>
   );
 }
+

@@ -23,7 +23,7 @@ const [openCreate, setOpenCreate] = useState(false);
     <div className="min-h-screen bg-neutral-900 text-neutral-100">
       {/* Header */}
       <header className="border-b border-neutral-800">
-        <div className="mx-auto max-w-7xl px-4 py-4 flex items-center justify-between">
+        <div className="mx-auto max-w-none px-4 md:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-xl font-semibold">DAO Voting</span>
             <span className="text-xs rounded bg-neutral-800 px-2 py-1">EIP-2771</span>
@@ -33,7 +33,7 @@ const [openCreate, setOpenCreate] = useState(false);
       </header>
 
       {/* Main */}
-      <main className="mx-auto max-w-7xl px-4 py-6">
+      <main className="mx-auto max-w-none px-4 md:px-6 py-6">
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Izquierda: 70% (col-span-2 de 3) */}
           <section className="lg:col-span-2 space-y-4">
@@ -75,7 +75,7 @@ const [openCreate, setOpenCreate] = useState(false);
 
       {/* Footer */}
       <footer className="border-t border-neutral-800">
-        <div className="mx-auto max-w-7xl px-4 py-6 text-sm text-neutral-400 flex items-center justify-between">
+        <div className="mx-auto max-w-7xl px-2 py-6 text-sm text-neutral-400 flex items-center justify-between">
           <span>© {new Date().getFullYear()} DAO Voting</span>
            <div className="flex items-center gap-4">
             <span>Chain: Local / Anvil</span>

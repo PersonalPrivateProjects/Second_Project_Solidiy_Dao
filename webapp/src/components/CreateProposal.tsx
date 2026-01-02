@@ -13,6 +13,7 @@ import {
   // Si agregaste este helper en daoHelpers, úsalo:
   // (de lo contrario, puedes comentar el import y saltarte la pre-validación)
   preValidateCreateProposal,
+  serializeForwardRequest
 } from "../lib/daoHelpers";
 import { toSeconds, formatDurationSeconds } from "../lib/timeHelpers";
 
@@ -24,17 +25,7 @@ type Props = {
 
 type DurationUnit = "seconds" | "minutes" | "hours" | "days";
 
-// Serializa ForwardRequest (evita BigInt en JSON)
-function serializeForwardRequest(req: any) {
-  return {
-    from: req.from,
-    to: req.to,
-    value: req.value?.toString?.() ?? String(req.value ?? 0),
-    gas: req.gas?.toString?.() ?? String(req.gas ?? 0),
-    nonce: req.nonce?.toString?.() ?? String(req.nonce ?? 0),
-    data: req.data,
-  };
-}
+
 
 export default function CreateProposal({ open, onClose, onCreated }: Props) {
   const [recipient, setRecipient] = useState<string>("");

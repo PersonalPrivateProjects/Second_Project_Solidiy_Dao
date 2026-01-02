@@ -28,6 +28,17 @@ export enum VoteType {
   AGAINST = 2,
 }
 
+
+export type ForwardRequestJSON = {
+  from: string;
+  to: string;
+  value: string; // uint256 como string
+  gas: string;   // uint256 como string
+  nonce: string; // uint256 como string
+  data: string;
+};
+
+
 // ===== Helpers comunes (client-side) =====
 
 /** Obtiene la cuenta activa (si la hay) desde Metamask */
@@ -303,8 +314,66 @@ export async function voteDirect(proposalId: number, vote: VoteType): Promise<et
   return tx.wait();
 }
 
+
+// --- Votos GasLess: construir la meta‑tx para votar ---
+export async function buildVoteMetaTx(from: string, proposalId: number, vote: VoteType): Promise<{ request: any; signature: string }> {
+  const provider = getBrowserProvider();
+  const signer = await provider.getSigner();
+  const { chainId } = await provider.getNetwork();
+
+  const daoRead = await getDAOVoting("read");
+  const forwarder = await getForwarder("read");
+
+  // calldata de vote(uint256 proposalId, uint8 voteType)
+  const data = daoRead.interface.encodeFunctionData("vote", [proposalId, vote]);
+
+  // nonce del usuario en el forwarder
+  const nonce: bigint = await forwarder.getNonce(from);
+
+  // Gas orientativo (no hay value); estimamos con margen
+  let gas: bigint = 200_000n;
+  try {
+    const daoWrite = await getDAOVoting("write");
+    const est = await daoWrite.estimateGas.vote(proposalId, vote);
+    gas = (est * 120n) / 100n;
+  } catch {
+    // fallback
+  }
+
+  const request = {
+    from,
+    to: daoRead.target as string,
+    value: 0n, // votar no transfiere ETH
+    gas,
+    nonce,
+    data,
+  };
+
+  const domain = {
+    name: "MinimalForwarder",
+    version: "0.0.1", // usa la versión de tu forwarder
+    chainId: Number(chainId),
+    verifyingContract: (forwarder.target as string),
+  };
+
+  const types = {
+    ForwardRequest: [
+      { name: "from", type: "address" },
+      { name: "to", type: "address" },
+      { name: "value", type: "uint256" },
+      { name: "gas", type: "uint256" },
+      { name: "nonce", type: "uint256" },
+      { name: "data", type: "bytes" },
+    ],
+  };
+
+  const signature = await (signer as any).signTypedData(domain, types, request);
+  return { request, signature };
+}
+
+
 // ===== Daemon helpers (server-side) =====
-// ATENCIÓN: En servidor NO usar getDAOVoting/getBrowserProvider (window.ethereum no existe).
+// ATENCIÓN: En servidor NO usa getDAOVoting/getBrowserProvider (window.ethereum no existe).
 // Usamos Provider/Signer que reciba el caller.
 
 export async function canExecuteProposal(provider: ethers.Provider, proposalId: number): Promise<boolean> {
@@ -353,4 +422,17 @@ export async function preValidateCreateProposal(from: string, amountWei: bigint)
 
   return { ok: issues.length === 0, issues };
 }
+
+
+export function serializeForwardRequest(req: any): ForwardRequestJSON {
+  return {
+    from: req.from,
+    to: req.to,
+    value: req.value?.toString?.() ?? String(req.value ?? 0),
+    gas: req.gas?.toString?.() ?? String(req.gas ?? 0),
+    nonce: req.nonce?.toString?.() ?? String(req.nonce ?? 0),
+    data: req.data,
+  };
+}
+
 

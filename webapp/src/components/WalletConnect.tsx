@@ -24,12 +24,62 @@ export default function WalletConnect() {
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Cargar chain al montar si hay ethereum
+  // Cargar chain y cuentas al montar si hay ethereum
   useEffect(() => {
     (async () => {
-      if (!getEthereum()) return;
-      const cid = await getChainId();
-      if (cid) setChainId(cid);
+      const eth = getEthereum();
+      if (!eth) return;
+
+      // 1) Chain ID
+      try {
+        const cid = await getChainId();
+        if (cid) setChainId(cid);
+      } catch {
+        // ignore
+      }
+
+      // 2) Cuentas ya autorizadas (no abre popup)
+      try {
+        const provider = new (await import("ethers")).BrowserProvider(eth);
+        const accounts: string[] = await provider.send("eth_accounts", []);
+        const addr = accounts[0] ?? null;
+        setAddress(addr);
+
+        if (addr) {
+          const { eth: balEth } = await getBalance(addr);
+          setBalance(Number(balEth).toFixed(4));
+        } else {
+          setBalance("—");
+        }
+      } catch (e) {
+        // ignore
+      }
+
+      // 3) Listener 'connect' del provider (opcional)
+      try {
+        const onConnect = async () => {
+          const cid = await getChainId();
+          if (cid) setChainId(cid);
+
+          const provider = new (await import("ethers")).BrowserProvider(eth);
+          const accounts: string[] = await provider.send("eth_accounts", []);
+          const addr = accounts[0] ?? null;
+          setAddress(addr);
+          if (addr) {
+            const { eth: balEth } = await getBalance(addr);
+            setBalance(Number(balEth).toFixed(4));
+          } else {
+            setBalance("—");
+          }
+        };
+
+        eth.on?.("connect", onConnect);
+        return () => {
+          eth.removeListener?.("connect", onConnect);
+        };
+      } catch {
+        // ignore
+      }
     })();
   }, []);
 
@@ -45,14 +95,17 @@ export default function WalletConnect() {
         setBalance("—");
       }
     });
+
     const offChain = onChainChanged(async () => {
       const cid = await getChainId();
       setChainId(cid);
+      // Recalcular balance si ya hay address
       if (address) {
         const { eth } = await getBalance(address);
         setBalance(Number(eth).toFixed(4));
       }
     });
+
     return () => {
       offAcc?.();
       offChain?.();
@@ -63,7 +116,7 @@ export default function WalletConnect() {
     setLoading(true);
     setErrorMsg(null);
     try {
-      const { address: addr, chainId: cid } = await connectWallet();
+      const { address: addr, chainId: cid } = await connectWallet(); // abre popup si hace falta
       setAddress(addr);
       setChainId(cid);
       if (addr) {
@@ -113,7 +166,9 @@ export default function WalletConnect() {
         {loading ? "Conectando…" : connected ? "Actualizar" : "Conectar Wallet"}
       </button>
 
-      {errorMsg && <span className="text-xs text-red-400 max-w-[240px]">{errorMsg}</span>}
+      {errorMsg && (
+        <span className="text-xs text-red-400 max-w-[240px]">{errorMsg}</span>
+      )}
     </div>
   );
 }
