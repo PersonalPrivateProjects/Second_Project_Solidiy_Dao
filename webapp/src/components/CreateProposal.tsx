@@ -16,6 +16,7 @@ import {
   serializeForwardRequest
 } from "../lib/daoHelpers";
 import { toSeconds, formatDurationSeconds } from "../lib/timeHelpers";
+import { useToast } from "../lib/useToast"; 
 
 type Props = {
   open: boolean;
@@ -28,6 +29,7 @@ type DurationUnit = "seconds" | "minutes" | "hours" | "days";
 
 
 export default function CreateProposal({ open, onClose, onCreated }: Props) {
+  const { success: toastSuccess, error: toastError } = useToast(); // ⬅️ hook
   const [recipient, setRecipient] = useState<string>("");
   const [amount, setAmount] = useState<string>(""); // ETH
 
@@ -40,6 +42,7 @@ export default function CreateProposal({ open, onClose, onCreated }: Props) {
   const [loading, setLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  
 
   const isRecipientOk =
     recipient.trim().length > 0 &&
@@ -86,7 +89,9 @@ export default function CreateProposal({ open, onClose, onCreated }: Props) {
       if (typeof preValidateCreateProposal === "function") {
         const { ok, issues } = await preValidateCreateProposal(from, amountWei);
         if (!ok) {
+          const msg = issues.join(" ");
           setErrorMsg(issues.join(" "));
+          toastError(msg, { title: "No se puede crear la propuesta" });
           setLoading(false);
           return;
         }
@@ -105,8 +110,9 @@ export default function CreateProposal({ open, onClose, onCreated }: Props) {
         // Serializamos BigInt -> string para JSON
         const safeReq = serializeForwardRequest(request);
         const { txHash } = await sendMetaTxToRelayer(safeReq, signature);
-
+        const msg = `Propuesta enviada vía gasless. Tx: ${txHash}`;
         setSuccessMsg(`Propuesta enviada vía gasless. Tx: ${txHash}`);
+        toastSuccess(msg, { title: "Propuesta enviada" });
       } else {
         // Directo → signer paga gas
         const receipt = await createProposalDirect(
@@ -115,7 +121,10 @@ export default function CreateProposal({ open, onClose, onCreated }: Props) {
           durationSec,
           description
         );
+
+        const msg = `Propuesta creada. Tx: ${receipt.hash}`;
         setSuccessMsg(`Propuesta creada. Tx: ${receipt.hash}`);
+        toastSuccess(msg, { title: "Propuesta creada" });
       }
 
       // Notificar a padre para refrescar lista (si aplica)
@@ -127,6 +136,7 @@ export default function CreateProposal({ open, onClose, onCreated }: Props) {
     } catch (err: any) {
       const msg = err?.reason || err?.message || "Error al crear propuesta";
       setErrorMsg(msg);
+      toastError(msg, { title: "Error" });
     } finally {
       setLoading(false);
     }

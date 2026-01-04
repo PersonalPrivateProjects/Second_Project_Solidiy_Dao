@@ -121,6 +121,6 @@ contract MinimalForwarder2771 is EIP712 {
     // El relayer decide `gas`/`value` y cubre el costo de la transacción (gasless UX).
   }
 
-  /// @notice Permite fondear el forwarder (por ejemplo, para reenviar `value` junto con llamadas)
+  /// @notice Permite fondear el forwarder (por ejemplo, para reenviar `value` junto con llamadas, para pagar el gas en cada execute).
   receive() external payable {}
 }

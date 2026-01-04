@@ -15,10 +15,12 @@ import {
 } from "../lib/daoHelpers";
 import { getEthereum, onAccountsChanged, onChainChanged } from "../lib/web3";
 import { getDAOVoting } from "../lib/contracts";
+import { useToast } from "../lib/useToast"; 
 
 type LoadState = "idle" | "loading" | "error";
 
 export default function DAOStats() {
+  const { success: toastSuccess, error: toastError } = useToast(); // ⬅️ hook
   const [account, setAccount] = useState<string | null>(null);
 
   // Métricas que pediste: balance del signer y tesorería del DAO
@@ -72,15 +74,21 @@ export default function DAOStats() {
         setMyContributionEth("—");
       }
     } catch (err) {
+      const msg = "Error al cargar métricas del DAO.";
       console.error("loadStats error:", err);
       setErrorMsg("Error al cargar métricas del DAO.");
+      toastError(msg, { title: "Carga de métricas" });
     }
   }
 
   // Inicial: cuenta + métricas
   useEffect(() => {
     (async () => {
-      if (!getEthereum()) return;
+      if (!getEthereum()) {        
+        const msg = "MetaMask no detectada. Conecta tu wallet para ver métricas.";
+        toastInfo(msg, { title: "Wallet requerida" }); // ⬅️ nuevo
+        return;
+      };
       const acc = await getSignerAddress();
       setAccount(acc);
       await loadStats(acc);
@@ -114,6 +122,7 @@ export default function DAOStats() {
         const handler = async () => {
           const acc = await getSignerAddress();
           await loadStats(acc);
+          toastInfo("Tesorería actualizada por un depósito.", { title: "Evento Funded" });
         };
         dao.on("Funded", handler);
       } catch {
@@ -141,8 +150,10 @@ export default function DAOStats() {
 
       const valueWei = parseEth(amount);
       await depositToDaoDirect(valueWei);
-
-      setSuccessMsg(`Depósito ejecutado: ${amount} ETH`);
+      
+      const okMsg = `Depósito ejecutado: ${amount} ETH`;
+      setSuccessMsg(okMsg);
+      toastSuccess(okMsg, { title: "Depósito exitoso" });
       setAmount("");
 
       await loadStats(acc);
@@ -150,6 +161,7 @@ export default function DAOStats() {
       console.error("handleDeposit error:", err);
       const msg = err?.reason || err?.message || "Error al depositar.";
       setErrorMsg(msg);
+      toastError(msg, { title: "Depósito fallido" });
     } finally {
       setLoading("idle");
     }
@@ -219,3 +231,7 @@ export default function DAOStats() {
     </div>
   );
 }
+function toastInfo(msg: string, arg1: { title: string; }) {
+  throw new Error("Function not implemented.");
+}
+
