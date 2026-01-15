@@ -210,7 +210,7 @@ contract DAOVotingForwarderTest is Test {
         dao.fundDAO{value: 0.5 ether}();
 
         vm.prank(bob);
-        vm.expectRevert(bytes("DAO: insufficient voting balance"));
+        vm.expectRevert(bytes("DAO: insufficient voting balance (0.1 ether)"));
         dao.vote(pid, DAOVoting2771.VoteType.FOR);
     }
 

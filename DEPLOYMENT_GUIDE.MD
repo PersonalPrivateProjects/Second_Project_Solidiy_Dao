@@ -17,11 +17,13 @@ Esto iniciará una blockchain local en `http://127.0.0.1:8545` con **10 cuentas 
 
 > **Tip:** Copia la **private key** de la primera cuenta que muestra Anvil. La usaremos para el deployment.
 
+En **otra terminal**,verifica que tengas instalado OpenZeppelin: `forge install OpenZeppelin/openzeppelin-contracts`
 ---
 
 ## ✅ **2. Configurar variables de entorno para los contratos**
 
 En la carpeta de contratos (`sc`):
+
 
 ```bash
 cd sc

@@ -197,7 +197,7 @@ contract DAOVoting2771 is ERC2771Context, ReentrancyGuard {
     require(!p.executed, "DAO: already executed");
 
     address voter = _msgSender();
-    require(_contributionOf[voter] >= minimumBalance, "DAO: insufficient voting balance");
+    require(_contributionOf[voter] >= minimumBalance, "DAO: insufficient voting balance (0.1 ether)");
 
     if (_hasVoted[proposalId][voter]) {
       // Cambiar voto: ajusta contadores
